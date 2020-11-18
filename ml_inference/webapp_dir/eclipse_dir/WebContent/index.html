@@ -1,0 +1,89 @@
+<!--
+Licensed under the Apache License, Version 2.0 (the "License")
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+     https://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+-->
+<!DOCTYPE html>
+<html>
+   <head>
+   <meta charset="UTF-8">
+    <meta name="description" content="ML Inference Demo">
+    <meta name="keywords" content="HTML, CSS, JavaScript">
+    <meta name="author" content="dpani">
+      <style>
+         .myDiv {
+         border: 0px outset red;
+         background-color: lightgray;
+         text-align: left;
+         width: 50%;
+         }
+      </style>
+   </head>
+   <body>
+      Make an ML inference by submitting the form below:
+      <p>
+      <form action="mlinference" method="POST">
+         <label for="mlinference_host">ML inference host url:</label><br>
+         <input type="text" id="mlinference_host" name="mlinference_host"
+            size="50" value="http://172.17.0.1:8000/v1/models/rpm:predict">
+         <p>
+            <label for="mlinference_check">
+                Invoke ML inference end point (yes/no); default - yes;
+                used for debugging/unit test purpose:</label><br>
+            <input type="text" id="mlinference_check"
+            name="mlinference_check" value="yes">
+         <p>
+            <label for="bounces">Bounces (input feature):</label><br>
+            <input type="text" id="bounces" name="bounces" value="0"><br>
+            <label for="time_on_site">Time on site (input feature):</label><br>
+            <input type="text" id="time_on_site" name="time_on_site"
+            value="7363"><br>
+            <input type="submit" value="Submit">
+      </form>
+      <ul>
+         <li>
+            The above form is based on the model created in the
+            propensity to purchase solution.<br>
+         </li>
+         <li>
+            Please check the article for the complete solution in Medium
+            <a href="https://medium.com/@dpani/how-to-build-an-end-to-end-
+ propensity-to-purchase-solution-using-bigquery-ml-and-kubeflow-pipelines-cd4161f734d9">
+                How to build an end-to-end propensity to purchase solution
+                using BigQuery ML and Kubeflow Pipelines</a>. <br>
+         </li>
+         <li>
+            Please check the notebook in <a href="https://github.com/
+ GoogleCloudPlatform/analytics-componentized-patterns/tree/master/retail/propensity-model/bqml">
+            git repo</a>.
+         </li>
+      </ul>
+      <p>
+      <div class="myDiv">
+         Licensed under the Apache License, Version 2.0 (the "License");<br>
+         you may not use this file except in compliance with the License.<br>
+         You may obtain a copy of the License at
+         <p>
+            https://www.apache.org/licenses/LICENSE-2.0
+         <p>
+            Unless required by applicable law or agreed to in writing,
+            software <br>
+            distributed under the License is distributed on an "AS IS"
+            BASIS, <br>
+            WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
+            or implied. <br>
+            See the License for the specific language governing
+            permissions and <br>
+            limitations under the License. <br>
+      </div>
+   </body>
+</html>
+

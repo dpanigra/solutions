@@ -1,0 +1,913 @@
+# Licensed under the Apache License, Version 2.0 (the "License")
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+# all variables used in the solution
+# mandatory variables that you need to initialize
+# export PROJECT_ID=`gcloud config get-value project`
+export PROJECT_ID=<YOUR PROJECT_ID>
+echo $PROJECT_ID
+export RPM_MODEL_PATH=${PROJECT_ID}_retail_propensity_model_assets
+echo $RPM_MODEL_PATH
+export RPM_MODEL_VER=V_36
+echo $RPM_MODEL_VER
+export RPM_MODEL_NAME=tensorflow-rpm
+echo $RPM_MODEL_NAME
+export PATH_TO_SAVED_MODEL_CLI=/Library/Frameworks/Python.framework/Versions/3.6/
+echo $PATH_TO_SAVED_MODEL_CLI
+export NAMESPACE=mlinfer-test
+echo $NAMESPACE
+export SPARK_NAMESPACE=spark-native
+echo $SPARK_NAMESPACE
+export GKE_CLUSTER_NAME=rpm-mlinfer-gke-cluster
+echo $GKE_CLUSTER_NAME
+export GOOGLE_CLOUD_REGION=us-central1
+echo $GOOGLE_CLOUD_REGION
+export GOOGLE_CLOUD_ZONE=us-central1-c
+echo $GOOGLE_CLOUD_ZONE
+export WEBAPP_NAMESPACE=webapp #used by the demo java web app
+echo $WEBAPP_NAMESPACE
+export GIT_CLONE_HOME_DIR=$HOME/Downloads
+echo $GIT_CLONE_HOME_DIR
+export KFSERVING_NAMESPACE=tensorflow-rpm
+echo $KFSERVING_NAMESPACE
+export KFSERVING_SAMPLE=flowers-sample
+echo $KFSERVING_SAMPLE
+export ISTIO_SERVICE=ingress-gke-system
+echo $ISTIO_SERVICE
+export ISTIO_NAMESPACE=gke-system
+echo $ISTIO_NAMESPACE
+export KFSERVING_RPM_MODEL=rpm-model
+echo $KFSERVING_RPM_MODEL
+export SERVICE_ACCOUNT_NAME=mlinfer-spark
+echo $SERVICE_ACCOUNT_NAME
+
+
+# program variables that you will set while working with the solution
+export PATH_TO_SAVED_MODEL_CLI=<your path>
+# export PATH_TO_SAVED_MODEL_CLI=/Library/Frameworks/Python.framework/Versions/3.6/
+# export PATH_TO_SAVED_MODEL_CLI=/usr/local/bin/
+export MY_DOCKER_HOST=<your docker host>
+export GOOGLE_APPLICATION_CREDENTIALS="</path/to/your sa filename>.json"
+export WEBAPP_NODE=<your web app node> #used to taint
+export KFSERVING_NODE=<your kfserving node> #use to taint
+export EXTERNAL_IP=<your external gke cluster ip>
+export SERVICE_HOSTNAME=<your service name for the tensorflow flowers KFServing endpoint>
+export INGRESS_HOST=<ingress public ip of the KFServing service>
+export SERVICE_HOSTNAME_RPM_MODEL=<your service name for the rpm model KFServing endpoint>
+export KUBECTL_INFER_EP_CMD=<your inference end point for rpm model in KFServing>
+export MLINFER_ENDPOINT_INTERNAL=<your internal inference end point for rpm model in KFServing>
+
+# working directories
+# $HOME/rpm -> you will download the rpm model in this directory
+# $HOME/Downloads/kfs -> you will clone the KFServing git repo
+# $HOME/docker_webapp_prep -> you will prepare the docker image for the web app
+# $HOME/sbttest_sanity -> you will validate the scala and sbt installs
+# $HOME/sbttest -> your Spark scala app development directory
+# $HOME/gke_deployment -> you will prepare yaml files to 
+#       deploy to Google Cloud Kubernetes Engine (GKE)
+# $HOME/Downloads/spark_dir ->  you will test locally the Spark app
+# $HOME/Downloads/spark_dir_remote -> you will test the GKE Spark deployment
+#       this directory doesn't have Google Cloud Storage specific configs
+# $HOME/sparkjob -> you will save the input file for the Spark job
+# $HOME/Downloads/spark_img -> you will build Spark 
+#       image with Google Cloud Storage connector and other configs
+
+######### 0. Git Clone the repo ###################
+cd $HOME/Downloads
+git clone <current repository> #repo url
+
+######## 1. install saved_model_cli in the Mac/Dataproc/Google Cloud Engine node ##############
+# install in mac (recommended - you will use for you local development)
+sudo pip3 install tensorflow
+# find the path to the saved_model_cli
+find ./ -name saved_model_cli 2>/dev/null
+export PATH_TO_SAVED_MODEL_CLI=<your path>
+# export PATH_TO_SAVED_MODEL_CLI=/Library/Frameworks/Python.framework/Versions/3.6/
+# export PATH_TO_SAVED_MODEL_CLI=/usr/local/bin/
+echo $PATH_TO_SAVED_MODEL_CLI
+ls -ltrah ${PATH_TO_SAVED_MODEL_CLI}/saved_model_cli
+# check the version of the tool
+$PATH_TO_SAVED_MODEL_CLI/saved_model_cli --version
+
+
+# install saved_model_cli via tensorflow (tested in Debian)
+python --version
+ls -ltrah /usr/bin/python
+mv /usr/bin/python /tmp/
+ln /usr/bin/python3 /usr/bin/python #as root; ensure that python3 is in use
+sudo apt-get install python3-pip -y
+sudo pip3 install tensorflow
+whereis saved_model_cli #check that the tool exists.
+# end of install saved_model_cli via tensorflow for Debian
+
+# install saved_model_cli via bazel build (tested in Ubunutu 18.04 LTS)
+mkdir -p $HOME/.bazel/bin
+cd "$HOME/.bazel/bin"
+curl -fLO https://releases.bazel.build/3.1.0/release/bazel-3.1.0-linux-x86_64
+chmod +x bazel-3.1.0-linux-x86_64
+ln -s bazel-3.1.0-linux-x86_64 bazel
+vi .bashrc
+export PATH="$PATH:$HOME/.bazel/bin"
+source .bashrc
+bazel --version
+sudo apt-get install openjdk-11-jdk
+ln /usr/bin/python3 /usr/bin/python #as root
+sudo apt install python3-distutils
+sudo apt install python3-numpy
+sudo apt install g++ unzip zip
+sudo apt install python3-future
+
+sudo apt-get install python3-dev
+
+sudo apt-get install python3-pip
+sudo pip3 install keras_applications==1.0.6 --no-deps
+sudo pip3 install keras_preprocessing==1.0.5 --no-deps
+sudo pip3 install h5py==2.8.0
+mkdir $HOME/saved_cli_pre; cd $HOME/saved_cli_pre
+git clone https://github.com/tensorflow/tensorflow.git
+
+cd $HOME/saved_cli_pre/tensorflow
+./configure
+bazel build tensorflow/python/tools:saved_model_cli
+
+ls $HOME/saved_cli_pre/tensorflow/bazel-bin/tensorflow/\
+python/tools/saved_model_cli
+#end of install saved_model_cli via bazel build (tested in Ubunutu 18.04 LTS)
+
+######## 2. download the propensity to the local environment ##############
+# download the propensity to purchase model
+# replace "v#" with the version from your propensity to purchase solution
+# gsutil cp \
+#    -r \
+#     gs://$RPM_MODEL_PATH/rpm_data_set/bqml/model/export/$RPM_MODEL_VER .
+# You could use the propensity to purchase saved_model available in the current git repo.
+ 
+# create a directory and download the TensorFlow saved model to it.
+mkdir $HOME/rpm; cd $HOME/rpm
+ 
+# Configure your project id
+echo $PROJECT_ID
+echo $RPM_MODEL_PATH
+# replace "<Google Cloud Storage bucket>" with your bucket
+echo $RPM_MODEL_VER=V_36
+gsutil cp \
+    -r \
+     gs://$RPM_MODEL_PATH/rpm_data_set/bqml/model/export/$RPM_MODEL_VER .
+ls -ltrahR
+# end of download the propensity to purchase model
+
+######## 3. inspect the signautre definition of the model ##############
+# inspect the signautre definition of the model
+# prints the inputs and the outputs of the rpm saved model
+$PATH_TO_SAVED_MODEL_CLI/saved_model_cli show \
+  --dir $HOME/rpm/$RPM_MODEL_VER/ \
+  --all
+# end of inspect the signautre definition of the model
+
+######## 4. input file to test the Spark application ##############
+mkdir $HOME/sparkjob
+cd $HOME/sparkjob
+# create the input file with sample data
+cp $GIT_CLONE_HOME_DIR/rpm_input_data/rpm-hdfs-input.csv . 
+# peek the input csv file
+head -n 3 $HOME/sparkjob/rpm-hdfs-input.csv
+
+################ 5. docker on mac ###########################
+# docker on mac
+# install docker if you don’t have it (follow the latest documentation from Docker)
+# the below commands are gathered from the Docker: https://docs.docker.com/docker-for-mac/install/
+# and are provided for convenience (tested in the macOS Catalina)
+brew install docker docker-machine
+brew cask install virtualbox
+docker-machine create --driver virtualbox default
+docker-machine ls
+docker-machine env default
+eval $(docker-machine env default)
+
+# validate
+docker --version
+docker-machine --version
+
+# check that docker is working
+docker ps -a
+
+# run a test program (hello-world)
+docker run hello-world
+
+
+docker-machine stop default
+docker-machine start default
+eval $(docker-machine env default)
+docker-machine stop default
+# end of docker on mac
+
+######## 6. downlaod and test TensorFlow Serving (TFServing) in the local environment ##############
+# pull the image and ensure that the image is now available for you to use
+docker pull tensorflow/serving
+docker image ls tensorflow/serving
+
+cd $HOME/rpm #the same directory where we have download a pre-trained model
+#'0001' is the revision of the served model.
+#  You could deploy a second version and conduct A/B testing
+mv $RPM_MODEL_VER/ 0001
+# remove the irrelevant files those we saved in the earlier solution
+#  for versioning purpose
+rm 0001/eval_detail.txt 0001/train_detail.txt
+
+docker run -t --rm -p 8000:8501 -v "$HOME/rpm:/models/rpm" \
+-e MODEL_NAME=rpm tensorflow/serving &
+
+docker ps -a #check that the TFServing server is running
+
+# gather the Docker host 
+export MY_DOCKER_HOST=`echo $DOCKER_HOST | awk -F ':' '{print $2}' \
+  | awk -F '/' '{print $3}'`
+# post a request to the TFServing
+curl -X POST -i http://$MY_DOCKER_HOST:8000/v1/models/rpm:predict --data '{ "signature_name":  "serving_default",  "instances":[{"bounces": [0], "time_on_site": [7363]}]}'
+# explicitly use application/json as Content Type
+curl -v -H "Content-Type: application/json" -X POST -d '{ "signature_name":  "serving_default",  "instances": [{"bounces": [0], "time_on_site": [7363]}]}' http://$MY_DOCKER_HOST:8000/v1/models/rpm:predict
+# end of setup and test TFServing
+
+# install brew (https://brew.sh/)
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install.sh)"
+ 
+######## 7. download and run tomcat in the local development env ##############
+# install brew (https://brew.sh/)
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install.sh)"
+# install java
+brew cask install adoptopenjdk
+brew tap AdoptOpenJDK/openjdk
+# Alert! don’t use the latest jdk, scala and sbt works on JDK 8
+brew cask install adoptopenjdk8 
+mkdir $HOME/tomcat; cd $HOME/tomcat #prepare a dir for Tomcat
+# download tomcat tar ball
+curl -fLO https://mirror.olnevhost.net/pub/apache/tomcat/tomcat-9/v9.0.38/bin/apache-tomcat-9.0.38.tar.gz #download the file
+ls -ltrah #check that the file exists
+tar -zxvf apache-tomcat-9.0.38.tar.gz #extract the file 
+# java is not in your path then
+vi $HOME/.bash_profile #modify the basf profile with JAVA_HOME
+# add the below line to your profile (adjust the jdk path to your installed directory)
+export JAVA_HOME=/Library/Java/JavaVirtualMachines/adoptopenjdk-8.jdk/Contents/Home/
+source $HOME/.bash_profile #update your current env or you could relogin
+echo $JAVA_HOME
+$JAVA_HOME/bin/java -version #check that 'java' works
+cd $HOME/tomcat/apache-tomcat-9.0.38/bin/ 
+./startup.sh #start tomcat
+curl localhost:8080 #check that tomcat works
+./shutdown.sh #shutdown tomcat
+curl localhost:8080 #you should get a Connection refused error
+
+######## 8. use the war file, create a docker image, test it and push to gcr ##############
+# copy your ecommerce to the home directory (ssh or direct upload via the browser)
+mkdir $HOME/docker_webapp_prep
+cd $HOME/docker_webapp_prep
+# export/create ecommerce.war file or copy from the git repo
+cp $GIT_CLONE_HOME_DIR/webapp_dir/webwar_dir/ecommerce.war . 
+ls -ltrah
+
+cat > Dockerfile << EOF
+# docker pull tomcat:9.0.38-jdk11-adoptopenjdk-openj9
+FROM tomcat:9.0.38-jdk11-adoptopenjdk-openj9
+ADD ecommerce.war /usr/local/tomcat/webapps/
+EXPOSE 8080
+CMD ["catalina.sh", "run"]
+EOF
+
+# Build the image
+docker build -t mywebapp .
+docker image ls mywebapp
+
+# Run a container from the image
+docker run -p 8080:8080 mywebapp &
+docker ps -a
+
+# Test the container app, home should through a 404
+echo $MY_DOCKER_HOST
+curl $MY_DOCKER_HOST:8080
+
+# Test the ecommerce homepage explicitly
+curl $MY_DOCKER_HOST:8080/ecommerce/index.html
+
+# Test the ecommerce homepage implictly
+curl $MY_DOCKER_HOST:8080/ecommerce/
+
+# Check end to end ecommerce app with the TF serving
+#   gather the docker binding address
+#   in the debian os (Dataproc node)
+# /sbin/ifconfig
+# /sbin/ifconfig | grep -A 1 docker0 | grep inet | awk -F ' ' '{print $2}'
+
+# You could toggle the model inference endpoint invocation via mlinference_check with yes or no value
+# POST request without invoking the ML inference endpoint
+curl -d "bounces=0&time_on_site=7363&mlinference_host=http://$MY_DOCKER_HOST:8000/v1/models/rpm:predict&mlinference_check=no" -X POST http://$MY_DOCKER_HOST:8080/ecommerce/mlinference
+# POST request which also invokes the ML inference endpoint
+curl -d "bounces=0&time_on_site=7363&mlinference_host=http://$MY_DOCKER_HOST:8000/v1/models/rpm:predict&mlinference_check=yes" -X POST http://$MY_DOCKER_HOST:8080/ecommerce/mlinference
+# end of building and testing the ecommerce web app
+
+# push the image to the gcr.io
+cd $HOME/docker_webapp_prep
+
+# install Google Cloud SDK (gsutil and gcloud; https://cloud.google.com/storage/docs/gsutil_install)
+curl https://sdk.cloud.google.com | bash
+# initialize the sdk
+gcloud init
+
+# authenticate to Google Cloud (https://cloud.google.com/docs/authentication)
+# you will authenticate using service account (https://cloud.google.com/docs/authentication/production)
+export GOOGLE_APPLICATION_CREDENTIALS="/path/to/<your sa filename>.json"
+gcloud auth configure-docker
+docker tag mywebapp gcr.io/$PROJECT_ID/mywebapp:tag1
+docker push gcr.io/$PROJECT_ID/mywebapp:tag1
+# docker pull gcr.io/$PROJECT_ID/mywebapp:tag1
+# gcloud container images delete gcr.io/$PROJECT_ID/mywebapp:tag1 --force-delete-tags
+
+############ 9. install scala, and sbt on mac #####################
+# install scala
+brew install scala
+# alternatively
+cd $HOME/Downloads
+curl -fLO https://downloads.lightbend.com/scala/2.13.3/scala-2.13.3.tgz
+tar -zxvf scala-2.13.3.tgz
+# add the bin directory to the .bash_profile or use the full path
+$HOME/Downloads/scala-2.13.3/bin/scalac
+$HOME/Downloads/scala-2.13.3/bin/scala
+# install sbt
+brew install sbt
+# run some basic tests
+# sanity check Scala - directly compile and run using scala
+mkdir $HOME/sbttest_sanity; cd $HOME/sbttest_sanity
+cat > helloworld.scala << EOF
+//first example
+package com.mycos.test
+object HelloWorld {
+    def main(args: Array[String]) {
+        println("Hello, world!")
+    }
+}
+EOF
+# run some basic tests to check the scala install 
+scalac helloworld.scala #compile the HelloWorld program
+ls -Rltrah
+scala com.mycos.test.HelloWorld #run the HelloWorld program
+ 
+# sanity check sbt - compile and run using sbt
+cd $HOME/sbttest_sanity
+ls -ltrah
+ 
+cat > helloworld.sbt << EOF
+libraryDependencies += "org.scala-lang" % "scala-library" % "2.12.0"
+EOF
+ 
+# run the HelloWorld application
+sbt compile run
+# end of install scala and sbt
+
+################## 10. install Spark on mac ##################
+# install and test spark on mac
+mkdir $HOME/Downloads/spark_dir
+cd $HOME/Downloads/spark_dir
+# download the Spark tarball
+curl -fLO https://apache.claz.org/spark/spark-3.0.1/spark-3.0.1-bin-hadoop2.7.tgz
+ls -ltrah spark-3.0.1-bin-hadoop2.7.tgz
+tar -zxvf spark-3.0.1-bin-hadoop2.7.tgz
+ls -ltrah
+
+# authenticate to Google Cloud (https://cloud.google.com/docs/authentication)
+# you will authenticate using service account (https://cloud.google.com/docs/authentication/production)
+# you will use the same service account that you used to authenticate earlier
+# you will use $GOOGLE_APPLICATION_CREDENTIALS
+#   You could use a different service account with specific permission for this task
+
+# create a spark-defaults configuration file
+# enable the service account authentication for Google Cloud Storage
+# specify the location of the service account file
+cat > spark-defaults.conf << EOF
+spark.hadoop.google.cloud.auth.service.account.enable       true
+spark.hadoop.google.cloud.auth.service.account.json.keyfile $GOOGLE_APPLICATION_CREDENTIALS
+EOF
+
+# copy the spark-defaults file to the Spark conf directory
+cp $HOME/Downloads/spark_dir/spark-defaults.conf $HOME/Downloads/spark_dir/spark-3.0.1-bin-hadoop2.7/conf
+ls -ltrah $HOME/Downloads/spark_dir/spark-3.0.1-bin-hadoop2.7/conf/spark-defaults.conf
+
+# download the three jar files you need to connect to Google Cloud Storage
+curl -fLO https://storage.googleapis.com/hadoop-lib/gcs/gcs-connector-hadoop2-latest.jar
+curl -fLO https://repo1.maven.org/maven2/com/google/guava/guava/29.0-jre/guava-29.0-jre.jar 
+curl -fLO https://repo1.maven.org/maven2/com/google/guava/failureaccess/1.0.1/failureaccess-1.0.1.jar
+
+# copy the three jar files that we downloaded above
+cp $HOME/Downloads/spark_dir/gcs-connector-hadoop2-latest.jar $HOME/Downloads/spark_dir/spark-3.0.1-bin-hadoop2.7/jars
+cp $HOME/Downloads/spark_dir/guava-19.0-jre.jar $HOME/Downloads/spark_dir/spark-3.0.1-bin-hadoop2.7/jars
+cp $HOME/Downloads/spark_dir/failureaccess-1.0.1.jar $HOME/Downloads/spark_dir/spark-3.0.1-bin-hadoop2.7/jars
+
+# validate that the correct jar file are there in the Spark jars directory
+ls -ltrah $HOME/Downloads/spark_dir/spark-3.0.1-bin-hadoop2.7/jars/*gcs*.jar
+ls -ltrah $HOME/Downloads/spark_dir/spark-3.0.1-bin-hadoop2.7/jars/*guava*.jar
+ls -ltrah $HOME/Downloads/spark_dir/spark-3.0.1-bin-hadoop2.7/jars/*failure*.jar
+
+# remove the older version of the guava
+rm $HOME/Downloads/spark_dir/spark-3.0.1-bin-hadoop2.7/jars/guava-14.0.1.jar
+ls -ltrah $HOME/Downloads/spark_dir/spark-3.0.1-bin-hadoop2.7/jars/*guava*.jar
+
+# a quick sanity check
+cd $HOME/Downloads/spark_dir/spark-3.0.1-bin-hadoop2.7/bin
+./spark-shell
+# at the scala prompt: print ("hi")
+# at the scala prompt: :q //to quit the spark-shell
+scala> print ("hi")
+scala> :q //to quit the spark-shell
+# end of install and test spark on mac
+
+# check scala REPL in spark-shell
+cd $HOME/Downloads/spark_dir/spark-3.0.1-bin-hadoop2.7/bin
+./spark-shell
+# at the scala prompt copy the following lines below:
+//first example	
+object HelloWorld {
+    def main(args: Array[String]) {
+        println("Hello, world!") 
+    } 
+}
+# at the scala prompt copy the line below:
+HelloWorld.main(Array())
+# end of install and test spark on mac
+
+################## 11. package jar in sbt and spark-submit ##################
+# package the code to a jar and spark-submit to the local master
+cd $HOME/sbttest_sanity
+sbt package
+
+cd $HOME/Downloads/spark_dir/spark-3.0.1-bin-hadoop2.7/bin
+./spark-submit \
+  --class com.mycos.test.HelloWorld \
+  --master local[1] \
+ $HOME/sbttest_sanity/target/scala-2.12/sbttest_sanity_2.12-0.1.0-SNAPSHOT.jar
+
+######## 12. develop, package and test the Spark scala app ##############
+# create proper directory structure
+# mv $HOME/sbttest/ $HOME/sbttest_sanity/ #incase there is already a directory
+mkdir $HOME/sbttest; cd $HOME/sbttest
+mkdir -p $HOME/sbttest/src/main/scala/
+# copy the scala file from git repo
+cp $GIT_CLONE_HOME_DIR/sparkapp_dir/src/main/scala/RPMMLInference.scala \
+  $HOME/sbttest/src/main/scala/
+
+# compile and package
+# copy the read_rpm.sbt from git rep
+cp $GIT_CLONE_HOME_DIR/sparkapp_dir/read_rpm.sbt \
+  $HOME/sbttest/
+# create a build.properties
+mkdir -p $HOME/sbttest/project/
+cat > $HOME/sbttest/project/build.properties << EOF
+sbt.version=1.3.13
+EOF
+
+sbt clean compile package
+ls -ltrah $HOME/sbttest/target/scala-2.12/mlinference_2.12-1.0.jar
+
+# upload the jar to a Google Cloud Storage bucket
+# create the bucket if it doesn't exists 
+gsutil ls gs://$PROJECT_ID-hdfs || gsutil mb gs://$PROJECT_ID-hdfs
+
+# upload the application jar file
+gsutil cp $HOME/sbttest/target/scala-2.12/mlinference_2.12-1.0.jar gs://$PROJECT_ID-hdfs/jars/
+gsutil ls gs://$PROJECT_ID-hdfs/jars/
+
+# upload input file to hdfs/Google Cloud Storage
+cd $HOME/sparkjob
+# Push the file to hdfs; if you are using hadoop
+# hdfs dfs -ls
+# hdfs dfs -mkdir /dp_hdfs
+# hdfs dfs -mkdir /dp_hdfs/dp_inf_test
+# hdfs dfs -put -f $HOME/sparkjob/rpm-hdfs-input.csv /dp_hdfs/dp_inf_test/
+# hdfs dfs -ls /dp_hdfs/dp_inf_test/
+# hdfs dfs -cat /dp_hdfs/dp_inf_test/rpm-hdfs-input.csv
+# upload the input file
+gsutil cp $HOME/sparkjob/rpm-hdfs-input.csv gs://$PROJECT_ID-hdfs/hdfs/
+gsutil ls gs://$PROJECT_ID-hdfs/hdfs/
+
+# test the app by spark-submit
+cd $HOME/Downloads/spark_dir/spark-3.0.1-bin-hadoop2.7/bin
+echo $MY_DOCKER_HOST
+# test - read the hdfs file and skip the ml inference
+# test with the local spark
+# test the spark submit job
+#  replace no with yes in the last argument parameter
+#     to invoke the mlinference endpoint
+./spark-submit \
+  --class com.mycos.test.RPMMLInference \
+  --master local[1] \
+  gs://$PROJECT_ID-hdfs/jars/mlinference_2.12-1.0.jar \
+  http://$MY_DOCKER_HOST:8000/v1/models/rpm:predict \
+  gs://$PROJECT_ID-hdfs/hdfs/rpm-hdfs-input.csv \
+  no
+# end of scala Spark app develop and test
+
+############### 13 Build Spark images and push them to Google Container Registry ######################
+# deploy spark images
+# create the base spark image 
+# this will be our golden image
+cd $HOME/Downloads/spark_dir/spark-3.0.1-bin-hadoop2.7/
+./bin/docker-image-tool.sh -r gcr.io/$PROJECT_ID -t v3.0.1 build
+./bin/docker-image-tool.sh -r gcr.io/$PROJECT_ID -t v3.0.1 push
+
+# create a Spark image with Google Cloud Storage Connector
+mkdir -p $HOME/Downloads/spark_img/gcs_jars
+cd $HOME/Downloads/spark_img/gcs_jars
+curl -fLO https://storage.googleapis.com/hadoop-lib/gcs/gcs-connector-hadoop2-latest.jar
+curl -fLO https://repo1.maven.org/maven2/com/google/guava/guava/29.0-jre/guava-29.0-jre.jar 
+
+cd $HOME/Downloads/spark_img
+cat > Dockerfile << EOF
+FROM gcr.io/$PROJECT_ID/spark:v3.0.1
+ADD gcs_jars/guava-29.0-jre.jar $SPARK_HOME/jars
+ADD gcs_jars/gcs-connector-hadoop2-latest.jar $SPARK_HOME/jars
+RUN ls -ltrah /opt/spark/work-dir
+ENTRYPOINT [ "/opt/entrypoint.sh" ]
+EOF
+
+#push the Spark images with Google Cloud Storage connector image to the registry
+docker build -t gcr.io/$PROJECT_ID/spark_gcs:v3.0.1 .
+docker push gcr.io/$PROJECT_ID/spark_gcs:v3.0.1
+# end of deploy spark images
+
+############### 14 a. provision Google Kubernetes Engine (GKE) and node pools ######################
+# create GKE cluster and deploy KFServing, Spark, web app
+mkdir $HOME/gke_deployment
+cd $HOME/gke_deployment
+
+# install kubectl
+brew install kubectl
+
+echo $PROJECT_ID
+echo $GKE_CLUSTER_NAME
+echo $GOOGLE_CLOUD_ZONE
+echo $GOOGLE_CLOUD_REGION
+echo $SERVICE_ACCOUNT_NAME
+
+# create the GKE cluster
+gcloud beta container --project $PROJECT_ID \
+clusters create $GKE_CLUSTER_NAME \
+--zone $GOOGLE_CLOUD_ZONE \
+--no-enable-basic-auth \
+--release-channel "regular" \
+--machine-type "e2-standard-4" \
+--image-type "COS" \
+--disk-type "pd-standard" \
+--disk-size "100" \
+--metadata disable-legacy-endpoints=true \
+--scopes "https://www.googleapis.com/auth/devstorage.full_control",\
+"https://www.googleapis.com/auth/logging.write",\
+"https://www.googleapis.com/auth/monitoring",\
+"https://www.googleapis.com/auth/servicecontrol",\
+"https://www.googleapis.com/auth/service.management.readonly",\
+"https://www.googleapis.com/auth/trace.append" \
+--num-nodes "2" \
+--enable-stackdriver-kubernetes \
+--enable-ip-alias \
+--network "projects/$PROJECT_ID/global/networks/default" \
+--subnetwork "projects/$PROJECT_ID/regions/$GOOGLE_CLOUD_REGION/subnetworks/default" \
+--default-max-pods-per-node "110" \
+--enable-autoscaling --min-nodes "1" --max-nodes "3" \
+--no-enable-master-authorized-networks \
+--addons HorizontalPodAutoscaling,HttpLoadBalancing,CloudRun \
+--enable-autoupgrade \
+--enable-autorepair 
+
+# create the a node pool for the web app
+gcloud beta container \
+--project $PROJECT_ID \
+node-pools create "webapp-pool" \
+--cluster $GKE_CLUSTER_NAME \
+--zone $GOOGLE_CLOUD_ZONE \
+--machine-type "e2-standard-4" \
+--image-type "COS" \
+--disk-type "pd-standard" \
+--disk-size "100" \
+--metadata disable-legacy-endpoints=true \
+--scopes "https://www.googleapis.com/auth/devstorage.full_control",\
+"https://www.googleapis.com/auth/logging.write",\
+"https://www.googleapis.com/auth/monitoring",\
+"https://www.googleapis.com/auth/servicecontrol",\
+"https://www.googleapis.com/auth/service.management.readonly",\
+"https://www.googleapis.com/auth/trace.append" \
+--num-nodes "1" \
+--enable-autoscaling --min-nodes "1" --max-nodes "3" \
+--enable-autoupgrade --enable-autorepair 
+
+# create a node pool for the KFServing
+gcloud beta container --project $PROJECT_ID \
+node-pools create "kfserving-pool" \
+--cluster $GKE_CLUSTER_NAME \
+--zone "$GOOGLE_CLOUD_REGION-c" \
+--machine-type "e2-standard-4" \
+--image-type "COS" \
+--disk-type "pd-standard" \
+--disk-size "100" \
+--metadata disable-legacy-endpoints=true \
+--scopes "https://www.googleapis.com/auth/devstorage.full_control",\
+"https://www.googleapis.com/auth/logging.write",\
+"https://www.googleapis.com/auth/monitoring",\
+"https://www.googleapis.com/auth/servicecontrol",\
+"https://www.googleapis.com/auth/service.management.readonly",\
+"https://www.googleapis.com/auth/trace.append" \
+--num-nodes "1" \
+--enable-autoscaling --min-nodes "1" --max-nodes "3" \
+--enable-autoupgrade \
+--enable-autorepair 
+# end of provison GKE node and node pools
+
+############### 14 b. grant proper permission ######################
+# enable Workload Identity 
+gcloud container clusters update $GKE_CLUSTER_NAME \
+--workload-pool=$PROJECT_ID.svc.id.goog \
+--zone $GOOGLE_CLOUD_ZONE
+
+gcloud container node-pools update default-pool \
+--cluster=$GKE_CLUSTER_NAME \
+--workload-metadata=GKE_METADATA \
+--zone $GOOGLE_CLOUD_ZONE
+
+gcloud container node-pools update webapp-pool \
+--cluster=$GKE_CLUSTER_NAME \
+--workload-metadata=GKE_METADATA \
+--zone $GOOGLE_CLOUD_ZONE
+
+gcloud container node-pools update kfserving-pool \
+--cluster=$GKE_CLUSTER_NAME \
+--workload-metadata=GKE_METADATA \
+--zone $GOOGLE_CLOUD_ZONE
+
+# create Google Service Account for Workload Identity 
+gcloud iam service-accounts create $SERVICE_ACCOUNT_NAME
+
+# provide Service Account access to the Google Cloud Storage Bucket
+gsutil iam ch serviceAccount:$SERVICE_ACCOUNT_NAME@$PROJECT_ID.iam.gserviceaccount.com:objectCreator,objectViewer gs://$PROJECT_ID-hdfs
+# end of grant proper permission
+
+############## 14 c. taint and label the node ###############
+# get the cluster credential
+gcloud container clusters get-credentials $GKE_CLUSTER_NAME 
+
+# to pin to the node
+export WEBAPP_NODE=$(kubectl get nodes \
+  -l cloud.google.com/gke-nodepool=webapp-pool \
+  -o 'jsonpath={.items[*].metadata.name}') 
+kubectl taint nodes $WEBAPP_NODE app=webapp:NoSchedule
+kubectl  label nodes $WEBAPP_NODE app=webapp
+
+# to pin to the node
+export KFSERVING_NODE=$(kubectl get nodes \
+-l cloud.google.com/gke-nodepool=kfserving-pool \
+-o 'jsonpath={.items[*].metadata.name}') 
+kubectl taint nodes $KFSERVING_NODE app=kfserving:NoSchedule
+kubectl  label nodes $KFSERVING_NODE app=kfserving
+
+############### 14 d. deploy the web app ######################
+# deploy the web app
+echo $WEBAPP_NAMESPACE
+echo $PROJECT_ID
+cp $GIT_CLONE_HOME_DIR/gke_deploy_dir/webapp.yaml .
+# replace the webapp namespace and the project id placeholders
+sed -i '' -e 's/WEBAPP_NAMESPACE/'$WEBAPP_NAMESPACE'/g' $HOME/gke_deployment/webapp.yaml
+sed -i '' -e 's/PROJECT_ID/'$PROJECT_ID'/g' $HOME/gke_deployment/webapp.yaml
+# check that we successfully replaced the variables
+grep $WEBAPP_NAMESPACE $HOME/gke_deployment/webapp.yaml
+grep $PROJECT_ID $HOME/gke_deployment/webapp.yaml
+ls -ltrah
+# create the namespace
+kubectl create ns $WEBAPP_NAMESPACE
+
+# deploy the web application
+kubectl apply -f $HOME/gke_deployment/webapp.yaml -n $WEBAPP_NAMESPACE
+
+# expose an external port (8080) to use it externally. Internally tomcat is listening on 8080
+kubectl expose deployment -n $WEBAPP_NAMESPACE mywebapp \
+  --type=LoadBalancer --port=8080 --protocol=TCP \
+  --target-port=8080
+
+# gather the external ip
+export EXTERNAL_IP=`kubectl get svc -n $WEBAPP_NAMESPACE -o \
+  jsonpath='{.items[0].status.loadBalancer.ingress[0].ip}'`
+echo $EXTERNAL_IP
+# it takes a while to get the ip. give it a min or so and try again.
+# end of deploy the web app
+
+############### 14 e. create a namespace and test the Spark images ######################
+# deploy spark
+kubectl create ns $SPARK_NAMESPACE
+# Allow the Kubernetes service account to impersonate the 
+# Google service account by creating an IAM policy binding 
+# between the two. This binding allows the Kubernetes Service 
+# account to act as the Google service account.
+
+gcloud iam service-accounts add-iam-policy-binding \
+  --role roles/iam.workloadIdentityUser \
+  --member "serviceAccount:$PROJECT_ID.svc.id.goog[spark-native/default]" \
+  $SERVICE_ACCOUNT_NAME@$PROJECT_ID.iam.gserviceaccount.com
+
+# Add the iam.gke.io/gcp-service-account=gsa-name@project-id 
+# annotation to the Kubernetes service account, using the 
+# email address of the Google service account.
+
+kubectl annotate serviceaccount \
+  --namespace $SPARK_NAMESPACE \
+  default \
+  iam.gke.io/gcp-service-account=$SERVICE_ACCOUNT_NAME@$PROJECT_ID.iam.gserviceaccount.com
+
+kubectl create clusterrolebinding spark-native-sa-admin \
+  --clusterrole=cluster-admin --serviceaccount=spark-native:default
+
+kubectl proxy &
+
+cd $HOME/Downloads/spark_dir/spark-3.0.1-bin-hadoop2.7/bin
+# test the out of the box pi example
+./spark-submit \
+    --master k8s://http://127.0.0.1:8001 \
+    --deploy-mode cluster \
+    --name spark-pi \
+    --class org.apache.spark.examples.SparkPi \
+    --conf spark.kubernetes.namespace=$SPARK_NAMESPACE \
+    --conf spark.executor.instances=1 \
+    --conf spark.kubernetes.container.image=gcr.io/$PROJECT_ID/spark:v3.0.1 \
+    local:///opt/spark/examples/jars/spark-examples_2.12-3.0.1.jar
+# check the log in Google Cloud Logging, see the section “Monitor the application logs of GKE in Google Cloud Logging”
+# you could also the check the container log
+kubectl logs -f `kubectl get pods -n $SPARK_NAMESPACE \
+  --sort-by=.metadata.creationTimestamp | grep driver \
+  | tail -1 | awk -F ' ' '{print $1}'` -n $SPARK_NAMESPACE
+
+# sanity check the new image by testing the out of the box pi example
+./spark-submit \
+    --master k8s://http://127.0.0.1:8001 \
+    --deploy-mode cluster \
+    --name spark-pi \
+    --class org.apache.spark.examples.SparkPi \
+    --conf spark.kubernetes.namespace=$SPARK_NAMESPACE \
+    --conf spark.executor.instances=1 \
+    --conf spark.kubernetes.container.image=gcr.io/$PROJECT_ID/spark_gcs:v3.0.1 \
+    local:///opt/spark/examples/jars/spark-examples_2.12-3.0.1.jar
+# check the log in Google Cloud Logging, see the section “Monitor the application logs of GKE in Google Cloud Logging”
+# you could also the check the container log
+kubectl logs -f `kubectl get pods -n $SPARK_NAMESPACE \
+  --sort-by=.metadata.creationTimestamp | grep driver \
+  | tail -1 | awk -F ' ' '{print $1}'` -n $SPARK_NAMESPACE
+
+# gcloud container images delete gcr.io/$PROJECT_ID/spark_gcs:v3.1.0 --force-delete-tags
+# end of deploy and test the Spark images
+
+############### 14 f. deploy KFServing ######################
+# deploy KFServing
+cp $GIT_CLONE_HOME_DIR/gke_deploy_dir/cert-manager.yaml .
+# deploy cert-manager
+kubectl apply --validate=false -f $HOME/gke_deployment/cert-manager.yaml
+# deploy KFServing
+# create a namespace
+echo $KFSERVING_NAMESPACE
+
+kubectl create ns $KFSERVING_NAMESPACE
+
+# Allow the Kubernetes service account to impersonate 
+# the Google service account by creating an IAM policy binding
+# between the two. This binding allows the Kubernetes Service account
+# to act as the Google service account.
+gcloud iam service-accounts add-iam-policy-binding \
+  --role roles/iam.workloadIdentityUser \
+  --member "serviceAccount:$PROJECT_ID.svc.id.goog[tensorflow-rpm/default]" \
+  $SERVICE_ACCOUNT_NAME@$PROJECT_ID.iam.gserviceaccount.com
+
+# Add the iam.gke.io/gcp-service-account=gsa-name@project-id 
+# annotation to the Kubernetes service account, using the 
+#email address of the Google service account.
+kubectl annotate serviceaccount \
+  --namespace $KFSERVING_NAMESPACE \
+  default \
+  iam.gke.io/gcp-service-account=$SERVICE_ACCOUNT_NAME@$PROJECT_ID.iam.gserviceaccount.com
+
+# Git clone the repo (on local env)
+# we will use the repo 
+mkdir $HOME/Downloads/kfs
+cd $HOME/Downloads/kfs
+git clone https://github.com/kubeflow/kfserving.git .
+
+# copy the kfserving.yaml file
+cd $HOME/gke_deployment
+cp $GIT_CLONE_HOME_DIR/gke_deploy_dir/kfserving.yaml .
+# deploy to the cluster
+kubectl apply -f $HOME/gke_deployment/kfserving.yaml
+# deploy the flowers example
+kubectl apply -f $HOME/Downloads/kfs/docs/samples/tensorflow/tensorflow.yaml \
+ -n $KFSERVING_NAMESPACE
+# end of deploying KFServing
+
+############### 14 f I. test KFServing ###################### 
+# sanity check the KFServing deployment
+# get the cluster credential
+gcloud container clusters get-credentials $GKE_CLUSTER_NAME 
+# open a local proxy 
+kubectl proxy &
+
+echo $KFSERVING_NAMESPACE
+echo $KFSERVING_SAMPLE
+echo $ISTIO_SERVICE
+echo $ISTIO_NAMESPACE
+
+export SERVICE_HOSTNAME=$(kubectl get inferenceservice $KFSERVING_SAMPLE \
+  -n $KFSERVING_NAMESPACE -o jsonpath='{.status.default.predictor.host}')
+echo $SERVICE_HOSTNAME 
+export INGRESS_HOST=$(kubectl get svc -l istio=$ISTIO_SERVICE \
+  -n $ISTIO_NAMESPACE -o jsonpath='{.items[0].status.loadBalancer.ingress[0].ip}')
+echo $INGRESS_HOST
+ 
+# check if the flowers-sample (a TensorFlow model) model is ready to accept request
+curl -H "Host: ${SERVICE_HOSTNAME}" "http://$INGRESS_HOST/v1/models/$KFSERVING_SAMPLE"
+ 
+# post data to the endpoint - use the sample file from the KFServing git repo 
+# from the kfserving git repo for flowers-sample (a TensorFlow model)
+curl -H "Host: ${SERVICE_HOSTNAME}" "http://$INGRESS_HOST/v1/models/$KFSERVING_SAMPLE:predict" -d @$HOME/Downloads/kfs/docs/samples/tensorflow/input.json
+# end of sanity check of the KFServing
+
+############### 14 g. deploy the rpm model in KFServing ###################### 
+# deploy the rpm model
+# copy the model to the Google Cloud Storage
+cd $HOME/rpm
+gsutil cp -r $HOME/rpm gs://$PROJECT_ID-hdfs/model/
+echo $PROJECT_ID
+cd $HOME/gke_deployment
+cp $GIT_CLONE_HOME_DIR/gke_deploy_dir/rpm-model.yaml .
+# replace the webapp namespace and the project id placeholders
+sed -i '' -e 's/PROJECT_ID/'$PROJECT_ID'/g' $HOME/gke_deployment/rpm-model.yaml
+# check that we successfully replaced the variables
+grep $PROJECT_ID $HOME/gke_deployment/rpm-model.yaml
+kubectl apply -f $HOME/gke_deployment/rpm-model.yaml \
+ -n $KFSERVING_NAMESPACE
+# test the rpm model
+echo $KFSERVING_RPM_MODEL
+export SERVICE_HOSTNAME_RPM_MODEL=$(kubectl get inferenceservice $KFSERVING_RPM_MODEL \
+  -n $KFSERVING_NAMESPACE -o jsonpath='{.status.default.predictor.host}')
+echo $SERVICE_HOSTNAME_RPM_MODEL 
+
+curl -H "Host: ${SERVICE_HOSTNAME_RPM_MODEL}" "http://$INGRESS_HOST/v1/models/$KFSERVING_RPM_MODEL"
+# end of deploy rpm model
+
+############### 15. test a spark-submit in GKE cluster ###################### 
+
+# prepare the Spark binaries
+mkdir $HOME/Downloads/spark_dir_remote
+cd $HOME/Downloads/spark_dir_remote
+cp $HOME/Downloads/spark_dir/spark-3.0.1-bin-hadoop2.7.tgz $HOME/Downloads/spark_dir_remote/
+ls -ltrahtar -zxvf spark-3.0.1-bin-hadoop2.7.tgz
+ls -ltrah
+# get the cluster credential
+gcloud container clusters get-credentials $GKE_CLUSTER_NAME 
+ 
+# create a local proxy 
+kubectl proxy &
+ 
+echo $KFSERVING_RPM_MODEL
+# access the ML inference endpoint through the internal dns
+export KUBECTL_INFER_EP_CMD="kubectl get inferenceservice ${KFSERVING_RPM_MODEL} \
+  -n ${KFSERVING_NAMESPACE} \
+  -o jsonpath='{.status.address.url}'"
+# e.g. http://${RPM_MODEL_NAME}-predictor-default.kfserving-test.svc.cluster.local
+echo $KUBECTL_INFER_EP_CMD
+ 
+export MLINFER_ENDPOINT_INTERNAL=`$KUBECTL_INFER_EP_CMD | awk -F 'rpm-model' \
+  '{print "http://rpm-model-predictor-default" $2 "rpm-model:predict"}'` 
+echo $MLINFER_ENDPOINT_INTERNAL
+ 
+# test the spark submit job
+# replace yes with no
+#     to skip invoking the mlinference endpoint
+#     primarily for troubleshooting purpose
+ 
+cd $HOME/Downloads/spark_dir_remote/spark-3.0.1-bin-hadoop2.7/bin
+./spark-submit \
+    --master k8s://http://127.0.0.1:8001 \
+    --deploy-mode cluster \
+    --name mlinference    \
+    --class com.mycos.test.RPMMLInference   \
+    --conf spark.kubernetes.namespace=$SPARK_NAMESPACE \
+    --conf spark.executor.instances=3 \
+    --conf spark.kubernetes.container.image=gcr.io/${PROJECT_ID}/spark_gcs:v3.0.1 \
+    gs://${PROJECT_ID}-hdfs/jars/mlinference_2.12-1.0.jar \
+    ${MLINFER_ENDPOINT_INTERNAL} \
+    gs://${PROJECT_ID}-hdfs/hdfs/rpm-hdfs-input.csv \
+    yes
+ 
+# check the log in Google Cloud Logging, see the section “Monitor the application logs of GKE in Google Cloud Logging”
+# you could also the check the container log
+kubectl logs -f `kubectl get pods -n $SPARK_NAMESPACE \
+  --sort-by=.metadata.creationTimestamp | grep driver \
+  | tail -1 | awk -F ' ' '{print $1}'` -n $SPARK_NAMESPACE
+# end of test spark-submit in GKE

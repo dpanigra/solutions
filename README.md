@@ -6,7 +6,7 @@
 
 [propen_code]: https://github.com/GoogleCloudPlatform/analytics-componentized-patterns/tree/master/retail/propensity-model/bqml
 [propen_blog]: https://medium.com/google-cloud/how-to-build-an-end-to-end-propensity-to-purchase-solution-using-bigquery-ml-and-kubeflow-pipelines-cd4161f734d9
-[mlreference_code]: mlinference
+[mlreference_code]: ml_inference
 [mlreference_blog]: https://medium.com/@dpani/how-to-make-an-ml-model-inference-on-kfserving-from-container-apps-web-spark-running-on-google-c50ca849c9f0
 
 

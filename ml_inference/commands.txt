@@ -727,6 +727,8 @@ kubectl annotate serviceaccount \
 kubectl create clusterrolebinding spark-native-sa-admin \
   --clusterrole=cluster-admin --serviceaccount=spark-native:default
 
+kubectl create clusterrolebinding default-sa-admin   --clusterrole=cluster-admin --serviceaccount=default:default
+
 export APISERVER=$(kubectl config view --minify | grep server | cut -f 2- -d ":" | tr -d " ")
 echo $APISERVER
 

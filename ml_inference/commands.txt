@@ -66,6 +66,9 @@ export INGRESS_HOST=<ingress public ip of the KFServing service>
 export SERVICE_HOSTNAME_RPM_MODEL=<your service name for the rpm model KFServing endpoint>
 export KUBECTL_INFER_EP_CMD=<your inference end point for rpm model in KFServing>
 export MLINFER_ENDPOINT_INTERNAL=<your internal inference end point for rpm model in KFServing>
+export APISERVER=<your end point>
+export SECRET_NAME=<your secret>
+export TOKEN=<your token>
 
 # working directories
 # $HOME/rpm -> you will download the rpm model in this directory
@@ -238,9 +241,6 @@ curl -X POST -i http://$MY_DOCKER_HOST:8000/v1/models/rpm:predict --data '{ "sig
 curl -v -H "Content-Type: application/json" -X POST -d '{ "signature_name":  "serving_default",  "instances": [{"bounces": [0], "time_on_site": [7363]}]}' http://$MY_DOCKER_HOST:8000/v1/models/rpm:predict
 # end of setup and test TFServing
 
-# install brew (https://brew.sh/)
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install.sh)"
- 
 ######## 7. download and run tomcat in the local development env ##############
 # install brew (https://brew.sh/)
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install.sh)"
@@ -268,7 +268,6 @@ curl localhost:8080 #check that tomcat works
 curl localhost:8080 #you should get a Connection refused error
 
 ######## 8. use the war file, create a docker image, test it and push to gcr ##############
-# copy your ecommerce to the home directory (ssh or direct upload via the browser)
 mkdir $HOME/docker_webapp_prep
 cd $HOME/docker_webapp_prep
 # export/create ecommerce.war file or copy from the git repo
@@ -291,7 +290,7 @@ docker image ls mywebapp
 docker run -p 8080:8080 mywebapp &
 docker ps -a
 
-# Test the container app, home should through a 404
+# Test the container app, a http reqest to home page should through a 404
 echo $MY_DOCKER_HOST
 curl $MY_DOCKER_HOST:8080
 
@@ -703,7 +702,7 @@ echo $EXTERNAL_IP
 # it takes a while to get the ip. give it a min or so and try again.
 # end of deploy the web app
 
-############### 14 e. create a namespace and test the Spark images ######################
+############### 14 e. create a namespace, setup workload identity and test the Spark images ######################
 # deploy spark
 kubectl create ns $SPARK_NAMESPACE
 # Allow the Kubernetes service account to impersonate the 
@@ -728,12 +727,24 @@ kubectl annotate serviceaccount \
 kubectl create clusterrolebinding spark-native-sa-admin \
   --clusterrole=cluster-admin --serviceaccount=spark-native:default
 
-kubectl proxy &
+export APISERVER=$(kubectl config view --minify | grep server | cut -f 2- -d ":" | tr -d " ")
+echo $APISERVER
+
+export SECRET_NAME=$(kubectl get secrets | grep ^default | cut -f1 -d ' ')
+echo $SECRET_NAME
+export TOKEN=$(kubectl describe secret $SECRET_NAME | grep -E '^token' | cut -f2 -d':' | tr -d " ")
+echo $TOKEN
+
+gcloud container clusters describe $GKE_CLUSTER_NAME --zone=$GOOGLE_CLOUD_ZONE \
+  --format="value(masterAuth.clusterCaCertificate)" | base64 -D > $HOME/gke_deployment/mycert.crt
+ls -ltrah $HOME/gke_deployment/mycert.crt
 
 cd $HOME/Downloads/spark_dir/spark-3.0.1-bin-hadoop2.7/bin
 # test the out of the box pi example
 ./spark-submit \
-    --master k8s://http://127.0.0.1:8001 \
+    --master k8s://$APISERVER \
+    --conf spark.kubernetes.authenticate.submission.caCertFile=$HOME/gke_deployment/mycert.crt \
+    --conf spark.kubernetes.authenticate.submission.oauthToken=$TOKEN \
     --deploy-mode cluster \
     --name spark-pi \
     --class org.apache.spark.examples.SparkPi \
@@ -741,6 +752,7 @@ cd $HOME/Downloads/spark_dir/spark-3.0.1-bin-hadoop2.7/bin
     --conf spark.executor.instances=1 \
     --conf spark.kubernetes.container.image=gcr.io/$PROJECT_ID/spark:v3.0.1 \
     local:///opt/spark/examples/jars/spark-examples_2.12-3.0.1.jar
+
 # check the log in Google Cloud Logging, see the section “Monitor the application logs of GKE in Google Cloud Logging”
 # you could also the check the container log
 kubectl logs -f `kubectl get pods -n $SPARK_NAMESPACE \
@@ -749,7 +761,9 @@ kubectl logs -f `kubectl get pods -n $SPARK_NAMESPACE \
 
 # sanity check the new image by testing the out of the box pi example
 ./spark-submit \
-    --master k8s://http://127.0.0.1:8001 \
+    --master k8s://$APISERVER \
+    --conf spark.kubernetes.authenticate.submission.caCertFile=$HOME/gke_deployment/mycert.crt \
+    --conf spark.kubernetes.authenticate.submission.oauthToken=$TOKEN \
     --deploy-mode cluster \
     --name spark-pi \
     --class org.apache.spark.examples.SparkPi \
@@ -757,6 +771,7 @@ kubectl logs -f `kubectl get pods -n $SPARK_NAMESPACE \
     --conf spark.executor.instances=1 \
     --conf spark.kubernetes.container.image=gcr.io/$PROJECT_ID/spark_gcs:v3.0.1 \
     local:///opt/spark/examples/jars/spark-examples_2.12-3.0.1.jar
+
 # check the log in Google Cloud Logging, see the section “Monitor the application logs of GKE in Google Cloud Logging”
 # you could also the check the container log
 kubectl logs -f `kubectl get pods -n $SPARK_NAMESPACE \
@@ -794,12 +809,6 @@ kubectl annotate serviceaccount \
   default \
   iam.gke.io/gcp-service-account=$SERVICE_ACCOUNT_NAME@$PROJECT_ID.iam.gserviceaccount.com
 
-# Git clone the repo (on local env)
-# we will use the repo 
-mkdir $HOME/Downloads/kfs
-cd $HOME/Downloads/kfs
-git clone https://github.com/kubeflow/kfserving.git .
-
 # copy the kfserving.yaml file
 cd $HOME/gke_deployment
 cp $GIT_CLONE_HOME_DIR/gke_deploy_dir/kfserving.yaml .
@@ -814,8 +823,12 @@ kubectl apply -f $HOME/Downloads/kfs/docs/samples/tensorflow/tensorflow.yaml \
 # sanity check the KFServing deployment
 # get the cluster credential
 gcloud container clusters get-credentials $GKE_CLUSTER_NAME 
-# open a local proxy 
-kubectl proxy &
+
+# Git clone the repo (on local env)
+# we will use the repo when we will santiy check the KFServing deployment
+mkdir $HOME/Downloads/kfs
+cd $HOME/Downloads/kfs
+git clone https://github.com/kubeflow/kfserving.git .
 
 echo $KFSERVING_NAMESPACE
 echo $KFSERVING_SAMPLE
@@ -868,11 +881,6 @@ cd $HOME/Downloads/spark_dir_remote
 cp $HOME/Downloads/spark_dir/spark-3.0.1-bin-hadoop2.7.tgz $HOME/Downloads/spark_dir_remote/
 ls -ltrahtar -zxvf spark-3.0.1-bin-hadoop2.7.tgz
 ls -ltrah
-# get the cluster credential
-gcloud container clusters get-credentials $GKE_CLUSTER_NAME 
- 
-# create a local proxy 
-kubectl proxy &
  
 echo $KFSERVING_RPM_MODEL
 # access the ML inference endpoint through the internal dns
@@ -893,7 +901,9 @@ echo $MLINFER_ENDPOINT_INTERNAL
  
 cd $HOME/Downloads/spark_dir_remote/spark-3.0.1-bin-hadoop2.7/bin
 ./spark-submit \
-    --master k8s://http://127.0.0.1:8001 \
+    --master k8s://$APISERVER \
+    --conf spark.kubernetes.authenticate.submission.caCertFile=$HOME/gke_deployment/mycert.crt \
+    --conf spark.kubernetes.authenticate.submission.oauthToken=$TOKEN \
     --deploy-mode cluster \
     --name mlinference    \
     --class com.mycos.test.RPMMLInference   \

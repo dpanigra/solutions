@@ -876,7 +876,6 @@ curl -H "Host: ${SERVICE_HOSTNAME_RPM_MODEL}" "http://$INGRESS_HOST/v1/models/$K
 # end of deploy rpm model
 
 ############### 15. test a spark-submit in GKE cluster ###################### 
-
 # prepare the Spark binaries
 mkdir $HOME/Downloads/spark_dir_remote
 cd $HOME/Downloads/spark_dir_remote
@@ -896,11 +895,14 @@ export MLINFER_ENDPOINT_INTERNAL=`$KUBECTL_INFER_EP_CMD | awk -F 'rpm-model' \
   '{print "http://rpm-model-predictor-default" $2 "rpm-model:predict"}'` 
 echo $MLINFER_ENDPOINT_INTERNAL
  
+echo $APISERVER
+ls -ltrah $HOME/gke_deployment/mycert.crt
+echo $TOKEN
+
 # test the spark submit job
 # replace yes with no
 #     to skip invoking the mlinference endpoint
 #     primarily for troubleshooting purpose
- 
 cd $HOME/Downloads/spark_dir_remote/spark-3.0.1-bin-hadoop2.7/bin
 ./spark-submit \
     --master k8s://$APISERVER \
